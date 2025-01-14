@@ -15,8 +15,12 @@ ifdef COMPILE_WITH_LLVM
     # for example, the empty prefix below will use the system gcc tools
     export PREFIX = 
 else
-    # GCC based toolchain
-	export CROSS = arm-none-eabi-
+	ifeq ($(strip $(DEVKITARM)),)
+	    $(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
+	endif
+	
+	# GCC based toolchain
+	export CROSS = $(DEVKITARM)/bin/arm-none-eabi-
 	export TOOLS = 
 	export PREFIX = 
 endif

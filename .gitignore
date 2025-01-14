@@ -5,6 +5,7 @@ build
 *.gba
 *.out
 *.a
+*.swp
 conv2aas
 AAS_Data.h
 AAS_Data.s
