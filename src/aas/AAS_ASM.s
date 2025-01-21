@@ -284,11 +284,13 @@ do_mods2:
 AAS_MixAudio_SetMaxChans_8:
 	adr r12,_ma_8ch
 	b do_mods2
+	bx lr
 	
 	
 AAS_MixAudio_SetMaxChans_2:
 	adr r12,_ma_2ch
 	b do_mods2
+	bx lr
 
 .pool
 
