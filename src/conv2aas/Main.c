@@ -35,6 +35,18 @@ __inline static UWORD SwapUWORD(UWORD a) {
   return (a >> 8) + ((a & 0xff) << 8);
 }
 
+struct PHA_song_data {
+  const unsigned int start;
+  const unsigned int end;
+  const unsigned int name;
+  const unsigned int artist;
+  unsigned int name_size;
+  unsigned int artist_size;
+};
+
+static unsigned short PHA_magic_number = 0x7F21;
+static unsigned short PHA_format_version = PHA_FORMAT_VERSION;
+
 static char GetHex(int val) {
   const char dat[] = "0123456789ABCDEF";
 
@@ -172,7 +184,7 @@ static int DATA_Append(DATAPACK *curr_data, unsigned char *data, int length) {
   }
 }
 
-static void DATA_Write(DATAPACK *curr_data, FILE *out_file) {
+static void DATA_Write(DATAPACK *curr_data, FILE *out_file, FILE *bin_out_file) {
   int i, len;
   UBYTE val;
 
@@ -194,14 +206,25 @@ static void DATA_Write(DATAPACK *curr_data, FILE *out_file) {
         val = 0;
       else
         val = *(curr_data->chunk_data + i);
+
       if (i == 0)
         fprintf(out_file, " %d", val);
       else
         fprintf(out_file, ", %d", val);
+
+      if (bin_out_file != NULL) {
+        fwrite(&val, 1, sizeof(val), bin_out_file);
+      }
     }
     fprintf(out_file, "\n");
   } else {
     fprintf(out_file, " 0\n");
+
+    if (bin_out_file != NULL) {
+      char val = 0;
+
+      fwrite(&val, 1, sizeof(val), bin_out_file);
+    }
   }
 
   printf("Done!\n");
@@ -1043,16 +1066,23 @@ int main(int argc, char *argv[]) {
   }
 
   FILE *out_file_s;
-  out_file_s = fopen("./AAS_Data.s", "w");
+  out_file_s = fopen("./audio_data.s", "w");
   if (!out_file_s) {
-    printf("Unable to open AASData.s for writing...\n");
+    printf("Unable to open audio_data.s for writing...\n");
     return 1;
   }
 
   FILE *out_file_h;
-  out_file_h = fopen("./AAS_Data.h", "w");
+  out_file_h = fopen("./audio_data.h", "w");
   if (!out_file_h) {
-    printf("Unable to open AASData.h for writing...\n");
+    printf("Unable to open audio_data.h for writing...\n");
+    return 1;
+  }
+
+  FILE *out_file_b;
+  out_file_b = fopen("./audio_data.bin", "w");
+  if (!out_file_b) {
+    printf("Unable to open audio_data.h for writing...\n");
     return 1;
   }
 
@@ -1083,6 +1113,12 @@ int main(int argc, char *argv[]) {
           "AAS_lib_v113\n.GLOBAL AAS_data_v113\nAAS_data_v113:\n.word "
           "AAS_lib_v113\n");
 
+  int song_count = 0;
+
+  fwrite(&PHA_magic_number, sizeof(short), 1, out_file_b);
+  fwrite(&PHA_format_version, sizeof(short), 1, out_file_b);
+  fwrite(&song_count, sizeof(int), 1, out_file_b);
+
   do {
     file_info = readdir(dir_info);
     if (file_info) {
@@ -1110,6 +1146,7 @@ int main(int argc, char *argv[]) {
       } else if (String_EndsWithRAW(file_info->d_name)) {
         int val;
         ++files_converted;
+        ++song_count;
         printf("Adding RAW %s...", file_info->d_name);
         val = RAW_LoadSound(temp, samples);
         if (val >= 0) {
@@ -1133,10 +1170,22 @@ int main(int argc, char *argv[]) {
                   "AAS_DATA_SFX_END_%s\nAAS_DATA_SFX_END_%s:\n.word "
                   "AAS_SampleData + %d\n",
                   temp, temp, val + last_samp_length);
+          
+          struct PHA_song_data song_data = {
+              val,
+              val + last_samp_length,
+              0,
+              0,
+              0,
+              0,
+          };
+          
+          fwrite(&song_data, sizeof(struct PHA_song_data), 1, out_file_b);
         }
       } else if (String_EndsWithWAV(file_info->d_name)) {
         int val;
         ++files_converted;
+        ++song_count;
         printf("Adding WAV %s...", file_info->d_name);
         val = WAV_LoadSound(temp, samples);
         if (val >= 0) {
@@ -1160,6 +1209,17 @@ int main(int argc, char *argv[]) {
                   "AAS_DATA_SFX_END_%s\nAAS_DATA_SFX_END_%s:\n.word "
                   "AAS_SampleData + %d\n",
                   temp, temp, val + last_samp_length);
+
+          struct PHA_song_data song_data = {
+              val,
+              val + last_samp_length,
+              0,
+              0,
+              0,
+              0,
+          };
+          
+          fwrite(&song_data, sizeof(struct PHA_song_data), 1, out_file_b);
         }
       }
     }
@@ -1179,15 +1239,19 @@ int main(int argc, char *argv[]) {
 
   // MOD_WritePeriodConvTable( out_file_h, 24002 );
 
-  DATA_Write(samples, out_file_s);
-  DATA_Write(patterns, out_file_s);
+  DATA_Write(samples, out_file_s, out_file_b);
+  DATA_Write(patterns, out_file_s, NULL);
 
   printf("\n");
 
   fprintf(out_file_h, "\nAAS_END_DECLS\n\n#endif\n");
 
+  fseek(out_file_b, 4, SEEK_SET);
+  fwrite(&song_count, sizeof(int), 1, out_file_b);
+
   fclose(out_file_h);
   fclose(out_file_s);
+  fclose(out_file_b);
 
   return 0;
 }
